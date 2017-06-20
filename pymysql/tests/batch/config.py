@@ -1,0 +1,1 @@
+conn_cnf = {'host':'localhost', 'port':3306, 'user':'root', 'password':'root', 'charset':'utf8'}
