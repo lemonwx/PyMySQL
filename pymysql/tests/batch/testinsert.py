@@ -16,7 +16,7 @@ tmpsql = ""
 conn.begin()
 
 for idx in range(0, total_size+1):
-	tmpsql = "update {}.{}  set num = {} where id = {};".format(db, tb, random.randint(5000,6000), idx)
+	tmpsql = "update {}.{}  set num = {} where id = {};".format(db, tb, random.randint(5000,6c000), idx)
 	sql += tmpsql
 	if not idx % batch_size:
 		cur.execute(sql)

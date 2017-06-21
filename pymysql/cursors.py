@@ -230,6 +230,12 @@ class Cursor(object):
         self.rowcount = rows
         return rows
 
+    def addbatch(self, query, args):
+        pass
+
+    def executebatch(self, query, args):
+        pass
+
     def callproc(self, procname, args=()):
         """Execute stored procedure procname with args
 
