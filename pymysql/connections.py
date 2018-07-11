@@ -1559,7 +1559,18 @@ class Stmt(object):
 
     def close(self):
         self.conn._execute_command(COMMAND.COM_STMT_CLOSE, struct.pack('I', self.id))
+
+    def execute(self, *args):
+        encoded_cmd = self.encode_exec_params(*args)
+        self.conn._execute_command(COMMAND.COM_STMT_EXECUTE, encoded_cmd)
+        return self.parse_exec_ret
     
+    def encode_exec_params(self, *args):
+        pass
+
+    def parse_exec_ret(self):
+        pass
+
     def dump(self):
         return "id: {}, col_count: {}, params_count: {}".format(
             self.id, self.col_count, self.params_count)
