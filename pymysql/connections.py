@@ -855,6 +855,12 @@ class Connection(object):
         self._affected_rows = self._read_query_result(unbuffered=unbuffered)
         return self._affected_rows
 
+    def prepare(self, sql):
+        self._execute_command(COMMAND.COM_STMT_PREPARE, sql)
+        stmt = Stmt(self, sql)
+        stmt.parse_prepare_ret()
+        return stmt
+
     def next_result(self, unbuffered=False):
         self._affected_rows = self._read_query_result(unbuffered=unbuffered)
         return self._affected_rows
@@ -1537,3 +1543,27 @@ class LoadLocalFile(object):
         finally:
             # send the empty packet to signify we are done sending data
             conn.write_packet(b'')
+
+
+class Stmt(object):
+    def __init__(self, conn, sql):
+        self.conn = conn
+        self.sql = sql
+
+    def parse_prepare_ret(self):
+        pkt = self.conn._read_packet()
+        pkt.read(1)
+        self.id = pkt.read_uint32()
+        self.col_count = pkt.read_uint16()
+        self.params_count = pkt.read_uint16()
+
+    def close(self):
+        self.conn._execute_command(COMMAND.COM_STMT_CLOSE, struct.pack('I', self.id))
+    
+    def dump(self):
+        return "id: {}, col_count: {}, params_count: {}".format(
+            self.id, self.col_count, self.params_count)
+
+
+
+
