@@ -980,6 +980,7 @@ class Connection(object):
         # directly, you should set self._next_seq_id properly.
         data = pack_int24(len(payload)) + int2byte(self._next_seq_id) + payload
         if DEBUG: dump_packet(data)
+        print("send --: ", data)
         self._write_bytes(data)
         self._next_seq_id = (self._next_seq_id + 1) % 256
 
@@ -994,6 +995,7 @@ class Connection(object):
 
             btrl, btrh, packet_number = struct.unpack('<HBB', packet_header)
             bytes_to_read = btrl + (btrh << 16)
+            print("recv header: ", packet_header, bytes_to_read)
             if packet_number != self._next_seq_id:
                 self._force_close()
                 if packet_number == 0:
@@ -1017,6 +1019,7 @@ class Connection(object):
 
         packet = packet_type(buff, self.encoding)
         packet.check_error()
+        print("recv data:", packet._data, len(packet._data))
         return packet
 
     def _read_bytes(self, num_bytes):
@@ -1094,6 +1097,7 @@ class Connection(object):
         # calling self..write_packet()
         prelude = struct.pack('<iB', packet_size, command)
         packet = prelude + sql[:packet_size-1]
+        print("send to db", packet)
         self._write_bytes(packet)
         if DEBUG: dump_packet(packet)
         self._next_seq_id = 1
@@ -1554,26 +1558,66 @@ class Stmt(object):
         pkt = self.conn._read_packet()
         pkt.read(1)
         self.id = pkt.read_uint32()
-        self.col_count = pkt.read_uint16()
+        self.fields_count = pkt.read_uint16()
         self.params_count = pkt.read_uint16()
+
+        if self.fields_count > 0:
+            self.read_to_eof()
+        if self.params_count > 0:
+            self.read_to_eof()
 
     def close(self):
         self.conn._execute_command(COMMAND.COM_STMT_CLOSE, struct.pack('I', self.id))
 
     def execute(self, *args):
+        assert self.params_count == len(args)
         encoded_cmd = self.encode_exec_params(*args)
-        self.conn._execute_command(COMMAND.COM_STMT_EXECUTE, encoded_cmd)
+        self.conn._next_seq_id = 0
+        self.conn.write_packet(encoded_cmd)
+        self.parse_exec_ret()
         return self.parse_exec_ret
     
     def encode_exec_params(self, *args):
-        pass
+        ret = struct.pack('B', COMMAND.COM_STMT_EXECUTE)
+        # ret = b''
+        ret += struct.pack('i', self.id)
+        ret += b'\x00'
+        ret += b'\x01\x00\x00\x00'
+
+        if len(args) > 0:
+            pass
+        return ret
 
     def parse_exec_ret(self):
-        pass
+        pkt = self.conn._read_packet()
+        if pkt.is_ok_packet:
+            pass
+
+        fields_count = pkt.read_length_encoded_integer()
+        assert fields_count == self.fields_count
+
+        self.parse_fields()
+        rows = self.read_to_eof()
+
+    def parse_fields(self):
+        for idx in range(self.fields_count):
+            pkt = self.conn._read_packet()
+            idx += 1
+        pkt = self.conn._read_packet()
+        assert pkt.is_eof_packet()
+        print("parse fields finish")
+
+    def read_to_eof(self):
+        while True:
+            pkt = self.conn._read_packet()
+            print("=====", pkt._data)
+            if pkt.is_eof_packet():
+                return
+
 
     def dump(self):
         return "id: {}, col_count: {}, params_count: {}".format(
-            self.id, self.col_count, self.params_count)
+            self.id, self.fields_count, self.params_count)
 
 
 
