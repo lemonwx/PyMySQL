@@ -17,7 +17,7 @@ import traceback
 import warnings
 
 from .charset import MBLENGTH, charset_by_name, charset_by_id
-from .constants import CLIENT, COMMAND, CR, FIELD_TYPE, SERVER_STATUS, FIELD_TYPE_SIZE
+from .constants import CLIENT, COMMAND, CR, FIELD_TYPE, SERVER_STATUS, FIELD_TYPE_SIZE_ENCODED
 from .converters import escape_item, escape_string, through, conversions as _conv
 from .cursors import Cursor
 from .optionfile import Parser
@@ -1623,8 +1623,8 @@ class Stmt(object):
                 if ( (null_mask[int((idx+2)>>3)] >> int( (idx+2)&7) ) & 1 ) == 1 :
                     row.append(field_val)
                     continue
-                if type_code in FIELD_TYPE_SIZE.field_type_encode_size:
-                    field_val = pkt.read(FIELD_TYPE_SIZE.field_type_encode_size[type_code])
+                if type_code in FIELD_TYPE_SIZE_ENCODED.field_type_encoded_size:
+                    field_val = pkt.read(FIELD_TYPE_SIZE_ENCODED.field_type_encoded_size[type_code])
                 else:
                     field_val = pkt.read_length_coded_string()
                 row.append(field_val)
