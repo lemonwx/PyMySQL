@@ -17,7 +17,7 @@ import traceback
 import warnings
 
 from .charset import MBLENGTH, charset_by_name, charset_by_id
-from .constants import CLIENT, COMMAND, CR, FIELD_TYPE, SERVER_STATUS
+from .constants import CLIENT, COMMAND, CR, FIELD_TYPE, SERVER_STATUS, FIELD_TYPE_SIZE
 from .converters import escape_item, escape_string, through, conversions as _conv
 from .cursors import Cursor
 from .optionfile import Parser
@@ -980,7 +980,7 @@ class Connection(object):
         # directly, you should set self._next_seq_id properly.
         data = pack_int24(len(payload)) + int2byte(self._next_seq_id) + payload
         if DEBUG: dump_packet(data)
-        print("send --: ", data)
+        # print("send --: ", data)
         self._write_bytes(data)
         self._next_seq_id = (self._next_seq_id + 1) % 256
 
@@ -995,7 +995,7 @@ class Connection(object):
 
             btrl, btrh, packet_number = struct.unpack('<HBB', packet_header)
             bytes_to_read = btrl + (btrh << 16)
-            print("recv header: ", packet_header, bytes_to_read)
+            # print("recv header: ", packet_header, bytes_to_read)
             if packet_number != self._next_seq_id:
                 self._force_close()
                 if packet_number == 0:
@@ -1019,7 +1019,7 @@ class Connection(object):
 
         packet = packet_type(buff, self.encoding)
         packet.check_error()
-        print("recv data:", packet._data, len(packet._data))
+        # print("recv data:", packet._data, len(packet._data))
         return packet
 
     def _read_bytes(self, num_bytes):
@@ -1097,7 +1097,7 @@ class Connection(object):
         # calling self..write_packet()
         prelude = struct.pack('<iB', packet_size, command)
         packet = prelude + sql[:packet_size-1]
-        print("send to db", packet)
+        # print("send to db", packet)
         self._write_bytes(packet)
         if DEBUG: dump_packet(packet)
         self._next_seq_id = 1
@@ -1471,10 +1471,12 @@ class MySQLResult(object):
                 # No more columns in this row
                 # See https://github.com/PyMySQL/PyMySQL/pull/434
                 break
+            # print(converter, data)
             if data is not None:
                 if encoding is not None:
                     data = data.decode(encoding)
                 if DEBUG: print("DEBUG: DATA = ", data)
+                # print(converter, data)
                 if converter is not None:
                     data = converter(data)
             row.append(data)
@@ -1596,16 +1598,51 @@ class Stmt(object):
         fields_count = pkt.read_length_encoded_integer()
         assert fields_count == self.fields_count
 
-        self.parse_fields()
-        rows = self.read_to_eof()
+        fields = self.parse_fields()
+        self.parse_rows(fields)
+
+    def _is_null():
+        pass
+
+    def parse_rows(self, fields):
+        self.rows = []
+        while True:
+            pkt = self.conn._read_packet()
+            if pkt.is_eof_packet():
+                print("parse rows finish")
+                break
+
+            pkt.read(1)
+            mask_size = ( len(fields) + 7 + 2 ) >> 3
+            null_mask = pkt.read(int(mask_size))
+
+            row = []
+            for idx, field in enumerate(fields):
+                field_val = None
+                type_code = field.type_code
+                if ( (null_mask[int((idx+2)>>3)] >> int( (idx+2)&7) ) & 1 ) == 1 :
+                    row.append(field_val)
+                    continue
+                if type_code in FIELD_TYPE_SIZE.field_type_encode_size:
+                    field_val = pkt.read(FIELD_TYPE_SIZE.field_type_encode_size[type_code])
+                else:
+                    field_val = pkt.read_length_coded_string()
+                row.append(field_val)
+            self.rows.append(tuple(row))
+
+        self.rows = tuple(self.rows)
+        print(self.rows)
 
     def parse_fields(self):
+        fields = []
         for idx in range(self.fields_count):
-            pkt = self.conn._read_packet()
-            idx += 1
+            field = self.conn._read_packet(FieldDescriptorPacket)
+            fields.append(field)
+            # print(field.name, field.charsetnr, field.length, field.type_code, field.flags, field.scale)
         pkt = self.conn._read_packet()
         assert pkt.is_eof_packet()
         print("parse fields finish")
+        return fields
 
     def read_to_eof(self):
         while True:
