@@ -17,7 +17,7 @@ import traceback
 import warnings
 
 from .charset import MBLENGTH, charset_by_name, charset_by_id
-from .constants import CLIENT, COMMAND, CR, FIELD_TYPE, SERVER_STATUS, FIELD_TYPE_SIZE_ENCODED
+from .constants import CLIENT, COMMAND, CR, FIELD_TYPE, SERVER_STATUS, FLAG
 from .converters import escape_item, escape_string, through, conversions as _conv
 from .cursors import Cursor
 from .optionfile import Parser
@@ -1620,13 +1620,31 @@ class Stmt(object):
             for idx, field in enumerate(fields):
                 field_val = None
                 type_code = field.type_code
+                unsigned = field.flags & FLAG.UNSIGNED != 0
+                
                 if ( (null_mask[int((idx+2)>>3)] >> int( (idx+2)&7) ) & 1 ) == 1 :
                     row.append(field_val)
                     continue
+                if type_code == FIELD_TYPE.LONGLONG:
+                    if unsigned:
+                        field_val = struct.unpack('L', pkt.read(8))[0]
+                    else:
+                        field_val = struct.unpack('l', pkt.read(8))[0]
+                elif type_code == FIELD_TYPE.LONG:
+                    if unsigned:
+                        field_val = struct.unpack('I', pkt.read(4))[0]
+                    else:
+                        field_val = struct.unpack('i', pkt.read(4))[0]
+                elif type_code == FIELD_TYPE.STRING:
+                    field_val = pkt.read_length_coded_string()
+
+
+                '''
                 if type_code in FIELD_TYPE_SIZE_ENCODED.field_type_encoded_size:
                     field_val = pkt.read(FIELD_TYPE_SIZE_ENCODED.field_type_encoded_size[type_code])
                 else:
                     field_val = pkt.read_length_coded_string()
+                '''
                 row.append(field_val)
             self.rows.append(tuple(row))
 
