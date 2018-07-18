@@ -1647,6 +1647,15 @@ class Stmt(object):
                         field_val = struct.unpack('L', pkt.read(8))[0]
                     else:
                         field_val = struct.unpack('l', pkt.read(8))[0]
+
+                elif type_code == FIELD_TYPE.FLOAT:
+                    field_val = struct.unpack('f', pkt.read(4))[0]
+                elif type_code == FIELD_TYPE.DOUBLE:
+                    field_val = struct.unpack('d', pkt.read(8))[0]
+                elif type_code == FIELD_TYPE.NEWDECIMAL:
+                    field_val = pkt.read_length_coded_string()
+
+
                 elif type_code == FIELD_TYPE.STRING:
                     field_val = pkt.read_length_coded_string()
 
