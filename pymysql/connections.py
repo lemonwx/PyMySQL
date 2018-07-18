@@ -1621,20 +1621,32 @@ class Stmt(object):
                 field_val = None
                 type_code = field.type_code
                 unsigned = field.flags & FLAG.UNSIGNED != 0
-                
+
+                print(field.name, type_code)
+
                 if ( (null_mask[int((idx+2)>>3)] >> int( (idx+2)&7) ) & 1 ) == 1 :
                     row.append(field_val)
                     continue
-                if type_code == FIELD_TYPE.LONGLONG:
+                if type_code == FIELD_TYPE.TINY:
                     if unsigned:
-                        field_val = struct.unpack('L', pkt.read(8))[0]
+                        field_val = struct.unpack('B', pkt.read(1))[0]
                     else:
-                        field_val = struct.unpack('l', pkt.read(8))[0]
-                elif type_code == FIELD_TYPE.LONG:
+                        field_val = struct.unpack('b', pkt.read(1))[0]
+                elif type_code == FIELD_TYPE.SHORT:
+                    if unsigned:
+                        field_val = struct.unpack('H', pkt.read(2))[0]
+                    else:
+                        field_val = struct.unpack('h', pkt.read(2))[0]
+                elif type_code == FIELD_TYPE.LONG or type_code == FIELD_TYPE.INT24:
                     if unsigned:
                         field_val = struct.unpack('I', pkt.read(4))[0]
                     else:
                         field_val = struct.unpack('i', pkt.read(4))[0]
+                elif type_code == FIELD_TYPE.LONGLONG:
+                    if unsigned:
+                        field_val = struct.unpack('L', pkt.read(8))[0]
+                    else:
+                        field_val = struct.unpack('l', pkt.read(8))[0]
                 elif type_code == FIELD_TYPE.STRING:
                     field_val = pkt.read_length_coded_string()
 
