@@ -1654,10 +1654,46 @@ class Stmt(object):
                     field_val = struct.unpack('d', pkt.read(8))[0]
                 elif type_code == FIELD_TYPE.NEWDECIMAL:
                     field_val = pkt.read_length_coded_string()
+                elif type_code == FIELD_TYPE.YEAR:
+                    field_val = struct.unpack('H', pkt.read(2))[0]
+                    length = pkt.read_length_encoded_integer()
+                elif type_code == FIELD_TYPE.TIMESTAMP or type_code == FIELD_TYPE.DATETIME:
+                    if length < 4:
+                        assert "timestamp data value's len must >= 4"
+                    data = pkt.read(length)
+                    year = struct.unpack('H', data[:2])[0]
+                    month = data[2]
+                    day = data[3]
+                    field_val = "{:0>4}-{:0>2}-{:0>2}".format(year, month, day)
+                    if length > 4:
+                        hour = struct.unpack('B', data[4:5])[0]
+                        minute = struct.unpack('B', data[5:6])[0]
+                        second = struct.unpack('B', data[6:7])[0]
+                        time = "{}:{}:{}".format(hour, minute, second)
 
+                        if field.scale != 0:
+                            mis = "0" * field.scale
+                            if len(data[7:]) == 4:
+                                mis = struct.unpack('I', data[7:])[0]
+                                while len(str(mis)) != field.scale:
+                                    mis = int(mis / 10)
+                            time = "{}.{}".format(time, mis)
+                        field_val = "{} {}".format(field_val, time)
+                elif type_code == FIELD_TYPE.TIME:
+                    pkt.read(6)
+                    hour, minute, second = struct.unpack('3b', pkt.read(3))
+                    field_val = "{}:{}:{}".format(hour, minute, second)
+                    if field.scale != 0:
+                        mis = struct.unpack('i', pkt.read(4))[0]
+                        while len(str(mis)) != field.scale:
+                            mis = int(mis / 10)
+                        field_val = "{}.{}".format(field_val, mis)
+                    print(length, data)
 
                 elif type_code == FIELD_TYPE.STRING:
                     field_val = pkt.read_length_coded_string()
+                else:
+                    print("----------", field.name, type_code, pkt._data[pkt._position:])
 
 
                 '''
