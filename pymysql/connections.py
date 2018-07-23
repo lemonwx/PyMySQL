@@ -1576,8 +1576,7 @@ class Stmt(object):
         encoded_cmd = self.encode_exec_params(*args)
         self.conn._next_seq_id = 0
         self.conn.write_packet(encoded_cmd)
-        self.parse_exec_ret()
-        return self.parse_exec_ret
+        return self.parse_exec_ret()
     
     def encode_exec_params(self, *args):
         ret = struct.pack('B', COMMAND.COM_STMT_EXECUTE)
@@ -1599,7 +1598,7 @@ class Stmt(object):
         assert fields_count == self.fields_count
 
         fields = self.parse_fields()
-        self.parse_rows(fields)
+        return self.parse_rows(fields)
 
     def _is_null():
         pass
@@ -1621,8 +1620,6 @@ class Stmt(object):
                 field_val = None
                 type_code = field.type_code
                 unsigned = field.flags & FLAG.UNSIGNED != 0
-
-                print(field.name, type_code)
 
                 if ( (null_mask[int((idx+2)>>3)] >> int( (idx+2)&7) ) & 1 ) == 1 :
                     row.append(field_val)
@@ -1655,6 +1652,50 @@ class Stmt(object):
                 elif type_code == FIELD_TYPE.NEWDECIMAL:
                     field_val = pkt.read_length_coded_string()
 
+                elif type_code == FIELD_TYPE.YEAR:
+                    field_val = struct.unpack('H', pkt.read(2))[0]
+                    length = pkt.read_length_encoded_integer()
+                elif type_code == FIELD_TYPE.TIMESTAMP or type_code == FIELD_TYPE.DATETIME:
+                    length = pkt.read_length_encoded_integer()
+                    if length < 4:
+                        assert "timestamp data value's len must >= 4"
+                    data = pkt.read(length)
+                    year = struct.unpack('H', data[:2])[0]
+                    month = data[2]
+                    day = data[3]
+                    field_val = "{:0>4}-{:0>2}-{:0>2}".format(year, month, day)
+                    if length > 4:
+                        hour = struct.unpack('B', data[4:5])[0]
+                        minute = struct.unpack('B', data[5:6])[0]
+                        second = struct.unpack('B', data[6:7])[0]
+                        time = "{}:{}:{}".format(hour, minute, second)
+
+                        if field.scale != 0:
+                            mis = "0" * field.scale
+                            if len(data[7:]) == 4:
+                                mis = struct.unpack('I', data[7:])[0]
+                                while len(str(mis)) != field.scale:
+                                    mis = int(mis / 10)
+                            time = "{}.{}".format(time, mis)
+                        field_val = "{} {}".format(field_val, time)
+                elif type_code == FIELD_TYPE.TIME:
+                    pkt.read(6)
+                    hour, minute, second = struct.unpack('3b', pkt.read(3))
+                    field_val = "{}:{}:{}".format(hour, minute, second)
+                    if field.scale != 0:
+                        mis = struct.unpack('i', pkt.read(4))[0]
+                        while len(str(mis)) != field.scale:
+                            mis = int(mis / 10)
+                        field_val = "{}.{}".format(field_val, mis)
+                elif type_code == FIELD_TYPE.DATE:
+                    length = pkt.read_length_encoded_integer()
+                    data = pkt.read(length)
+                    year = struct.unpack('H', data[:2])[0]
+                    month = data[2]
+                    day = data[3]
+
+                    field_val = "{:0>4}-{:0>2}-{:0>2}".format(year, month, day)
+
 
                 elif type_code == FIELD_TYPE.STRING:
                     field_val = pkt.read_length_coded_string()
@@ -1670,7 +1711,8 @@ class Stmt(object):
             self.rows.append(tuple(row))
 
         self.rows = tuple(self.rows)
-        print(self.rows)
+        # print(self.rows)
+        return self.rows
 
     def parse_fields(self):
         fields = []
